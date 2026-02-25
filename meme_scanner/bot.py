@@ -60,6 +60,7 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
     tp_mc  = result["take_profit"] * supply
     vwap_mc = result["vwap"]       * supply
     atr_pct = result["atr"] / entry * 100 if entry > 0 else 0
+    atr_mc  = result["atr"] * supply
 
     msg = (
         f"🚨 ミームコインアラート 🚨\n"
@@ -86,7 +87,7 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
         f"📉 損切りMC:  ${sl_mc:,.0f}  (ATR×{result['atr_sl_mult']})\n"
         f"📈 利確目標MC:${tp_mc:,.0f}  (ATR×{result['atr_tp_mult']})\n"
         f"⚖️  RR比:     1:{result['risk_reward']:.1f}\n"
-        f"📐 ATR:       {atr_pct:.2f}%\n"
+        f"📐 ATR:       {atr_pct:.2f}%  (${atr_mc:,.0f})\n"
         f"📊 VWAP MC:   ${vwap_mc:,.0f}\n"
         f"\n"
         f"━━━━━━━━━━━━━━━\n"
