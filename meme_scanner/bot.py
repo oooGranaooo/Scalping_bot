@@ -109,7 +109,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
 
     # Stage 1: GeckoTerminal trending_pools でMCフィルタ
     pairs = dex_scanner.get_filtered_pairs()
-    logger.info(f"Stage1完了: MCレンジ内の上位{len(pairs)}件をスキャン（MC降順）")
+    logger.info(f"Stage1完了: MCレンジ内からランダム{len(pairs)}件をスキャン")
 
     for pair in pairs:
         token_address = pair["token_address"]
@@ -274,7 +274,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⚙️ 現在の設定\n"
         f"\n"
         f"📦 MCレンジ:     ${config.MC_MIN:,.0f} 〜 ${config.MC_MAX:,.0f}\n"
-        f"🏆 スキャン対象: MC上位10件\n"
+        f"🎲 スキャン対象: MCレンジ内からランダム10件\n"
         f"🎯 通知閾値:     {notify_threshold}点以上\n"
         f"⏱️ スキャン間隔: "
         f"{'%d分' % (scan_interval // 60) if scan_interval % 60 == 0 else '%d秒' % scan_interval}"
