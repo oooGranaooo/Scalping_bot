@@ -383,9 +383,33 @@ def _fetch_outcome(
         "token":            "base",
     }
 
+    _MAX_RETRIES = 3
+    _RETRY_WAIT  = 10.0
+
+    resp = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = requests.get(url, headers=config.GT_HEADERS, params=params, timeout=10)
+            resp.raise_for_status()
+            break
+        except requests.exceptions.HTTPError as e:
+            if resp is not None and resp.status_code == 429 and attempt < _MAX_RETRIES:
+                wait = _RETRY_WAIT * (attempt + 1)
+                logger.warning(
+                    f"[tracker] OHLCV 429 レート制限 ({pool_address}) "
+                    f"→ {wait:.0f}秒後にリトライ ({attempt + 1}/{_MAX_RETRIES})"
+                )
+                time.sleep(wait)
+                continue
+            logger.warning(f"[tracker] OHLCV取得失敗 ({pool_address}): {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"[tracker] OHLCV取得失敗 ({pool_address}): {e}")
+            return None
+    else:
+        return None
+
     try:
-        resp = requests.get(url, headers=config.GT_HEADERS, params=params, timeout=10)
-        resp.raise_for_status()
         raw = resp.json()["data"]["attributes"]["ohlcv_list"]
         raw.reverse()  # 降順 → 昇順
 

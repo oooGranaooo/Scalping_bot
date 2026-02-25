@@ -29,10 +29,15 @@ def get_pool_address(token_address: str) -> str | None:
         return None
 
 
+_MAX_RETRIES = 3
+_RETRY_WAIT  = 10.0  # 429時のリトライ待機秒数
+
+
 def fetch_ohlcv(pool_address: str, mc: float) -> pd.DataFrame | None:
     """
     プールアドレスとMCを受け取り、MC帯に応じた時間軸のOHLCVを返す。
     columns: ["timestamp", "open", "high", "low", "close", "volume"]
+    429 Too Many Requests の場合は最大 _MAX_RETRIES 回リトライする。
     取得失敗の場合は None を返す。
     """
     mc_params = config.get_mc_params(mc)
@@ -48,25 +53,40 @@ def fetch_ohlcv(pool_address: str, mc: float) -> pd.DataFrame | None:
         "currency":  "usd",
         "token":     "base",
     }
-    try:
-        resp = requests.get(url, headers=config.GT_HEADERS, params=params, timeout=10)
-        resp.raise_for_status()
-        raw = resp.json()["data"]["attributes"]["ohlcv_list"]
-        raw.reverse()  # 降順 → 昇順（古い順）に変換
 
-        df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
-        df = df.astype({
-            "open":   float,
-            "high":   float,
-            "low":    float,
-            "close":  float,
-            "volume": float,
-        })
-        return df
-    except Exception as e:
-        logger.warning(f"OHLCV取得失敗 ({pool_address}): {e}")
-        return None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = requests.get(url, headers=config.GT_HEADERS, params=params, timeout=10)
+            resp.raise_for_status()
+            raw = resp.json()["data"]["attributes"]["ohlcv_list"]
+            raw.reverse()  # 降順 → 昇順（古い順）に変換
+
+            df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+            df = df.astype({
+                "open":   float,
+                "high":   float,
+                "low":    float,
+                "close":  float,
+                "volume": float,
+            })
+            return df
+        except requests.exceptions.HTTPError as e:
+            if resp.status_code == 429 and attempt < _MAX_RETRIES:
+                wait = _RETRY_WAIT * (attempt + 1)
+                logger.warning(
+                    f"OHLCV 429 レート制限 ({pool_address}) "
+                    f"→ {wait:.0f}秒後にリトライ ({attempt + 1}/{_MAX_RETRIES})"
+                )
+                time.sleep(wait)
+                continue
+            logger.warning(f"OHLCV取得失敗 ({pool_address}): {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"OHLCV取得失敗 ({pool_address}): {e}")
+            return None
+
+    return None
 
 
 if __name__ == "__main__":
