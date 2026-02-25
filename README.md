@@ -1,0 +1,1 @@
+# Scalping Bot — Signal Logs
