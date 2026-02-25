@@ -70,14 +70,17 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
     ca         = html.escape(pair["token_address"])
 
     # 現在価格からサプライを逆算し、各指標をMC換算する
-    entry  = result["entry"]
-    mc     = pair["mc"]
-    supply = mc / entry if entry > 0 else 0
-    sl_mc  = result["stop_loss"]   * supply
-    tp_mc  = result["take_profit"] * supply
-    vwap_mc = result["vwap"]       * supply
+    entry   = result["entry"]
+    mc      = pair["mc"]
+    supply  = mc / entry if entry > 0 else 0
+    sl_mc   = result["stop_loss"]   * supply
+    tp_mc   = result["take_profit"] * supply
+    vwap_mc = result["vwap"]        * supply
     atr_pct = result["atr"] / entry * 100 if entry > 0 else 0
     atr_mc  = result["atr"] * supply
+
+    pps_bonus_str = f"{bd['pps_bonus']:+.0f}" if bd.get("pps_bonus", 0) != 0 else "±0"
+
 
     msg = (
         f"🚨 ミームコインアラート 🚨\n"
@@ -98,6 +101,12 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
         f"({result['success_count']}/{result['signal_count']}回成功 / "
         f"{result['success_rate']:.0%}){low_warn}\n"
         f"  過熱ペナル: {bd['penalty']:.0f}/−15\n"
+        f"  価格位置:   {pps_bonus_str}/±10\n"
+        f"\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"📍 価格位置: {result['pps_stars']} {result['pps_label']} ({result['pps']}/5)\n"
+        f"  レンジ内: 下位{result['range_pct']:.0%}  "
+        f"VWAP乖離: {result['vwap_dev']:+.1f}%\n"
         f"\n"
         f"━━━━━━━━━━━━━━━\n"
         f"💰 現在MC:    ${mc:,.0f}\n"
@@ -229,6 +238,7 @@ def get_help_text() -> str:
         "  RSI(9)      20点\n"
         "  流動性       15点\n"
         "  再現性       20点\n"
+        "  価格位置     ±10点\n"
         "  過熱ペナルティ −15点\n"
         "\n"
         "━━━━━━━━━━━━━━━\n"
