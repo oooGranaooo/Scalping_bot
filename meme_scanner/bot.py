@@ -119,6 +119,11 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"{pair['symbol']}: キャッシュ済みのためスキップ")
             continue
 
+        # OPEN中チェック（OHLCV取得前にスキップして無駄なAPI呼び出しを防ぐ）
+        if tracker.is_token_open(token_address):
+            logger.info(f"{pair['symbol']}: OPEN中のためスキップ")
+            continue
+
         # Stage 2: OHLCV取得
         # pair_address は trending_pools から取得済みのプールアドレスをそのまま使用
         pool_address = pair["pair_address"]

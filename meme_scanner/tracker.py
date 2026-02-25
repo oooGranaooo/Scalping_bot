@@ -147,6 +147,17 @@ def _write_csv(df: pd.DataFrame):
 #  公開 API
 # ══════════════════════════════════════════════════════════════
 
+def is_token_open(token_address: str) -> bool:
+    """指定トークンが OPEN 状態で記録されているか確認する。"""
+    _init_csv()
+    df = _read_csv()
+    if df.empty:
+        return False
+    return bool(
+        ((df["token_address"] == token_address) & (df["outcome"] == "OPEN")).any()
+    )
+
+
 def record_signal(
     pair_info: dict,
     result: dict,
