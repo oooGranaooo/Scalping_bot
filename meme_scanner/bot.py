@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import html
 import logging
 import time
 from datetime import datetime, timezone, timedelta
 
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -44,11 +46,14 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
     bd         = result["breakdown"]
     ts         = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
     low_warn   = " ⚠️ サンプル少" if result["low_sample"] else ""
+    symbol     = html.escape(pair["symbol"])
+    name       = html.escape(pair["name"])
+    ca         = html.escape(pair["token_address"])
 
     msg = (
         f"🚨 ミームコインアラート 🚨\n"
         f"\n"
-        f"🪙 {pair['symbol']} ({pair['name']})\n"
+        f"🪙 {symbol} ({name})\n"
         f"🔗 Solana  |  📦 MC帯: {result['mc_band']}\n"
         f"📊 スコア: {result['score']}/100\n"
         f"\n"
@@ -78,8 +83,8 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
         f"📦 MC:       ${pair['mc']:,.0f}\n"
         f"🕐 1h出来高: ${pair['volume_h1']:,.0f}\n"
         f"\n"
-        f"🔗 {pair['dex_url']}\n"
-        f"🔗 https://www.geckoterminal.com/solana/pools/{pool_address}\n"
+        f"📋 CA（タップでコピー）\n"
+        f"<code>{ca}</code>\n"
         f"⏰ {ts} JST"
     )
     return msg
@@ -135,6 +140,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
                 text=msg,
+                parse_mode=ParseMode.HTML,
             )
             cache.mark(token_address)
             logger.info(f"{pair['symbol']}: 通知送信（{result['score']}点）")
