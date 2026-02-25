@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import os
 import subprocess
-import time
 from datetime import datetime, timezone, timedelta, time as dtime
 
 from telegram import Update
@@ -117,7 +117,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"{pair['symbol']}: プールアドレスなし、スキップ")
             continue
 
-        time.sleep(config.GT_REQUEST_INTERVAL)
+        await asyncio.sleep(config.GT_REQUEST_INTERVAL)
         df = gt_fetcher.fetch_ohlcv(pool_address, pair["mc"])
         if df is None or len(df) < config.MIN_CANDLES:
             logger.warning(
@@ -267,7 +267,9 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📦 MCレンジ:     ${config.MC_MIN:,.0f} 〜 ${config.MC_MAX:,.0f}\n"
         f"🏆 スキャン対象: MC上位10件\n"
         f"🎯 通知閾値:     {notify_threshold}点以上\n"
-        f"⏱️ スキャン間隔: {scan_interval // 60}分 ({scan_interval}秒)\n"
+        f"⏱️ スキャン間隔: "
+        f"{'%d分' % (scan_interval // 60) if scan_interval % 60 == 0 else '%d秒' % scan_interval}"
+        f" ({scan_interval}秒)\n"
         f"🔄 自動スキャン: {'稼働中 ✅' if scan_running else '停止中 ⛔'}\n"
         f"⏰ 最終スキャン: {last_scan_time} JST"
     )

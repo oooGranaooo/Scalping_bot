@@ -9,18 +9,27 @@ logger = logging.getLogger(__name__)
 
 def calc_rsi(closes: pd.Series, period: int = RSI_PERIOD) -> float:
     """RSI(9) — Wilder平滑化（EWM）"""
+    return float(calc_rsi_series(closes, period).iloc[-1])
+
+
+def calc_rsi_series(closes: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
+    """RSI(9) — 全インデックス分のSeries を返す"""
     delta    = closes.diff()
     gain     = delta.clip(lower=0)
     loss     = -delta.clip(upper=0)
     avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     rs       = avg_gain / avg_loss.replace(0, float("inf"))
-    rsi      = 100 - (100 / (1 + rs))
-    return float(rsi.iloc[-1])
+    return 100 - (100 / (1 + rs))
 
 
 def calc_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> float:
     """ATR(14) — True Range の EWM"""
+    return float(calc_atr_series(df, period).iloc[-1])
+
+
+def calc_atr_series(df: pd.DataFrame, period: int = ATR_PERIOD) -> pd.Series:
+    """ATR(14) — 全インデックス分のSeries を返す"""
     high       = df["high"]
     low        = df["low"]
     close      = df["close"]
@@ -33,18 +42,16 @@ def calc_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> float:
         ],
         axis=1,
     ).max(axis=1)
-    atr = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    return float(atr.iloc[-1])
+    return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
 def calc_vwap(df: pd.DataFrame) -> float:
-    """VWAP（当日分のみ）"""
-    today   = df[df["timestamp"].dt.date == df["timestamp"].dt.date.iloc[-1]].copy()
-    typical = (today["high"] + today["low"] + today["close"]) / 3
-    total_vol = today["volume"].sum()
+    """VWAP（全期間）"""
+    typical   = (df["high"] + df["low"] + df["close"]) / 3
+    total_vol = df["volume"].sum()
     if total_vol == 0:
         return float(df["close"].iloc[-1])
-    return float((typical * today["volume"]).sum() / total_vol)
+    return float((typical * df["volume"]).sum() / total_vol)
 
 
 def calc_volume_surge(df: pd.DataFrame) -> float:

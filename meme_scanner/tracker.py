@@ -32,6 +32,10 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "signal_log.
 # シグナルから何秒後に結果を確認するか（60分）
 OUTCOME_CHECK_DELAY = 3600
 
+# GeckoTerminal API リトライ設定
+_MAX_RETRIES = 3
+_RETRY_WAIT  = 10.0  # 429時のリトライ待機秒数
+
 # これより古いシグナルは GeckoTerminal のデータ範囲外になるため確認を諦める
 OUTCOME_MAX_AGE = 10 * 3600  # 10時間
 
@@ -82,7 +86,7 @@ COLUMNS = [
     "notify_threshold",    # 通知時の閾値設定値
 
     # ── リンク ────────────────────────────────────────────────
-    "dex_url",             # DexScreener の URL
+    "gecko_url",           # GeckoTerminal の URL
     "pool_address",        # GeckoTerminal のプールアドレス
     "token_address",       # トークンアドレス
 
@@ -203,7 +207,7 @@ def record_signal(
         "volume_surge_min":  mc_params["volume_surge_min"],
         "notified":          notified,
         "notify_threshold":  notify_threshold,
-        "dex_url":           pair_info["dex_url"],
+        "gecko_url":         pair_info["gecko_url"],
         "pool_address":      pool_address,
         "token_address":     pair_info["token_address"],
         # 結果は後から記入
@@ -382,9 +386,6 @@ def _fetch_outcome(
         "currency":         "usd",
         "token":            "base",
     }
-
-    _MAX_RETRIES = 3
-    _RETRY_WAIT  = 10.0
 
     resp = None
     for attempt in range(_MAX_RETRIES + 1):
