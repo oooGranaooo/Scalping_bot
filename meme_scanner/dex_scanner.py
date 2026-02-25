@@ -28,7 +28,7 @@ def get_filtered_pairs() -> list[dict]:
         try:
             resp = requests.get(
                 _GT_TRENDING_URL,
-                params={"page": page},
+                params={"page": page, "duration": config.GT_TRENDING_DURATION},
                 headers=config.GT_HEADERS,
                 timeout=10,
             )
