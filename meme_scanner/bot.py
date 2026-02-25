@@ -170,7 +170,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
 
 async def check_outcomes_job(context: ContextTypes.DEFAULT_TYPE):
     """シグナルから60分後の値動きを確認してログを更新するバックグラウンドジョブ。"""
-    updated = tracker.check_outcomes()
+    updated = await asyncio.to_thread(tracker.check_outcomes)
     if updated > 0:
         logger.info(f"[tracker] バックグラウンド結果確認: {updated}件更新")
 
@@ -245,11 +245,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name="auto_scan",
     )
     # 15分ごとにシグナルの結果（60分後の値動き）を確認するジョブ
+    # first=450: auto_scan（5分間隔）と重複しないよう7.5分後に初回実行
+    # misfire_grace_time=120: auto_scan がイベントループを占有しても最大2分以内なら実行
     context.job_queue.run_repeating(
         check_outcomes_job,
         interval=900,   # 15分ごと
-        first=900,      # /start から15分後に初回実行
+        first=450,      # /start から7.5分後に初回実行（auto_scan と重複しない）
         name="outcome_check",
+        job_kwargs={"misfire_grace_time": 120},
     )
     interval_disp = (
         f"{scan_interval // 60}分"
