@@ -73,6 +73,7 @@ COLUMNS = [
     "signal_count",        # 過去シグナル発生回数
     "success_count",       # うち上昇成功回数
     "success_rate",        # 成功率（0.0〜1.0）
+    "adjusted_rate",       # ベイズ補正後の成功率（0.0〜1.0）
 
     # ── 適用されたMC帯パラメータ ──────────────────────────────
     "ohlcv_aggregate",     # 使用した足の時間軸（分）
@@ -200,6 +201,7 @@ def record_signal(
         "signal_count":      result["signal_count"],
         "success_count":     result["success_count"],
         "success_rate":      round(result["success_rate"], 3),
+        "adjusted_rate":     round(result.get("adjusted_rate", result["success_rate"]), 3),
         "ohlcv_aggregate":   mc_params["ohlcv_aggregate"],
         "rsi_overbought":    mc_params["rsi_overbought"],
         "atr_sl_mult":       mc_params["atr_sl_mult"],
