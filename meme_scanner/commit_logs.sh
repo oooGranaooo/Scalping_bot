@@ -41,7 +41,7 @@ if [ -z "$1" ]; then
         # 既存のツリーを取得して signal_log.csv だけ上書き
         BASE_TREE=$(git cat-file -p "$PARENT^{tree}" | grep -v "signal_log" | awk '{printf "%s %s %s\t%s\n", $1, $2, $3, $4}')
         NEW_ENTRY=$(printf "100644 blob %s\tsignal_log.csv" "$BLOB")
-        TREE=$(printf "%s\n%s\n" "$BASE_TREE" "$NEW_ENTRY" | git mktree)
+        TREE=$(printf "%s%s\n" "$BASE_TREE" "$NEW_ENTRY" | git mktree)
     else
         TREE=$(printf "100644 blob %s\tsignal_log.csv\n" "$BLOB" | git mktree)
     fi
@@ -72,7 +72,7 @@ else
         # 既存のツリーを取得してアーカイブファイルを追加
         BASE_TREE=$(git cat-file -p "$PARENT^{tree}" | awk '{printf "%s %s %s\t%s\n", $1, $2, $3, $4}')
         NEW_ENTRY=$(printf "100644 blob %s\t%s" "$BLOB" "$ARCHIVE_NAME")
-        TREE=$(printf "%s\n%s\n" "$BASE_TREE" "$NEW_ENTRY" | git mktree)
+        TREE=$(printf "%s%s\n" "$BASE_TREE" "$NEW_ENTRY" | git mktree)
         COMMIT=$(git commit-tree "$TREE" -p "$PARENT" -m "log: $DATE $ARCHIVE_NAME アーカイブ")
     else
         TREE=$(printf "100644 blob %s\t%s\n" "$BLOB" "$ARCHIVE_NAME" | git mktree)
