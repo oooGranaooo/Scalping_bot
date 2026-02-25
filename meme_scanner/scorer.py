@@ -127,6 +127,7 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
         "signal_count":  repro["signal_count"],
         "success_count": repro["success_count"],
         "success_rate":  repro["success_rate"],
+        "adjusted_rate": repro.get("adjusted_rate", repro["success_rate"]),
         "low_sample":    low_sample,
     }
 
