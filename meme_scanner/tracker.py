@@ -157,6 +157,7 @@ def record_signal(
     """
     スキャン結果を CSV の新規行として記録する。
     閾値未満のペアも含め、スコア計算できたすべてを記録する。
+    同一トークンの outcome が OPEN のまま残っている場合は重複記録しない。
 
     Args:
         pair_info        : dex_scanner が返す正規化済みペア情報
@@ -166,9 +167,21 @@ def record_signal(
         notify_threshold : その時点の通知閾値
 
     Returns:
-        signal_id（8文字の識別子）
+        signal_id（8文字の識別子）。スキップした場合は空文字列。
     """
     _init_csv()
+
+    # OPEN 中の同トークンがあれば重複記録しない
+    df = _read_csv()
+    token = pair_info["token_address"]
+    if not df.empty:
+        already_open = (
+            (df["token_address"] == token) &
+            (df["outcome"] == "OPEN")
+        ).any()
+        if already_open:
+            logger.info(f"[tracker] スキップ（OPEN中）: {pair_info['symbol']}")
+            return ""
 
     mc_params = config.get_mc_params(pair_info["mc"])
     bd        = result["breakdown"]
@@ -224,8 +237,6 @@ def record_signal(
         "outcome":            "OPEN",
         "pnl_pct":            "",
     }
-
-    df = _read_csv()
     df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
     _write_csv(df)
 
