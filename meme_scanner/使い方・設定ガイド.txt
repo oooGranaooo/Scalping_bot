@@ -132,6 +132,11 @@
   │ /setinterval <間隔>  │ 自動スキャンの間隔を変更         │
   └──────────────────────┴──────────────────────────────────┘
 
+  ※ スコア・フィルター系（RSI過熱閾値・損切り倍率・利確倍率・
+    出来高閾値）の変更は edit_config.sh で行う（セクション6参照）。
+    変更時に signal_log.csv が自動アーカイブされ、設定変更前後の
+    パフォーマンス比較ができる。
+
 【/threshold の使い方】
   スコアがこの点数以上のコインだけ通知される。
 
@@ -161,7 +166,7 @@
   蓄積されたシグナルログの統計サマリーを表示する。
   スキャン実績・勝率・平均損益率を確認できる。
 
-  /logsummary    → サマリーを表示
+  /logsummary    → サマリーを表示(現在記録中のlogの)
 
   表示される内容:
     総記録数     … これまでにスコア計算したシグナルの総数
@@ -307,11 +312,32 @@
   ファイルの場所:
     /Users/shionueta/Project/Scalping_bot/meme_scanner/config.py
 
-  編集方法:
-    nano /Users/shionueta/Project/Scalping_bot/meme_scanner/config.py
-    （Ctrl+O で保存、Ctrl+X で閉じる）
+  【設定の変更方法】
 
-  変更を反映するには Bot を再起動する（Ctrl+C → start.sh）。
+  ▼ 通知閾値・MCレンジを変更する場合
+    Telegram で /threshold <点数> を送信する（Bot 稼働中でも即反映）。
+
+                /setmc 500K 50M      → $500K〜$50M（デフォルト）
+                /setmc 1M 10M        → $1M〜$10M に絞る
+                /setmc 300000 5000000 → 数値でも指定可
+
+
+  ▼ スコア・フィルター系（RSI過熱閾値・損切り倍率・利確倍率・
+    出来高閾値）を変更する場合（推奨）
+      ターミナルで設定エディタを起動する:
+
+        bash /Users/shionueta/Project/Scalping_bot/meme_scanner/edit_config.sh
+
+      → 番号を選んで値を入力するだけで設定変更・ログアーカイブ・
+        Bot 再起動まで自動で行われる。
+      → 変更と同時に signal_log.csv が自動アーカイブされるため、
+        設定変更前後のパフォーマンスを CSV 単位で比較できる。
+
+  ▼ config.py を直接編集する場合
+      nano /Users/shionueta/Project/Scalping_bot/meme_scanner/config.py
+      （Ctrl+O で保存、Ctrl+X で閉じる）
+      変更を反映するには Bot を再起動する（Ctrl+C → start.sh）。
+
   ※ /setmc・/threshold・/setinterval で変更した項目は
     Bot を再起動すると config.py の初期値に戻る。
 
@@ -340,7 +366,7 @@
   └──────────────────┴──────────┴──────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  MC帯別パラメータ（MC_BAND_PARAMS）                             │
+  │  MC帯別パラメータ（MC_BAND_PARAMS）★ edit_config.sh で変更推奨 │
   ├─────────────────────┬──────────────────────────────────────────┤
   │ 設定項目            │ 説明                                     │
   ├─────────────────────┼──────────────────────────────────────────┤
@@ -415,12 +441,23 @@
   これにより 1トークン = 1シグナル として整理されたデータになる。
 
 【ファイルの場所】
-  /Users/shionueta/Project/Scalping_bot/meme_scanner/signal_log.csv
+  /Users/shionueta/Project/Scalping_bot/meme_scanner/logs/signal_log.csv
 
   Excel または Numbers で直接開ける（UTF-8 BOM 形式）。
 
+【設定変更時の自動アーカイブ】
+  edit_config.sh で設定を変更すると、変更前の signal_log.csv が自動的に
+
+    signal_log_until_YYYYMMDD_HHMMSS.csv
+
+  としてアーカイブされ、新しい signal_log.csv が作成される。
+  設定変更前後の CSV を別々に Claude に分析させることで、
+  変更の効果を客観的に比較できる。
+
 【GitHub への自動バックアップ】
-  毎日 0:00 JST に signal_log.csv が GitHub の logs ブランチへ自動コミットされる。
+  毎日 0:00 JST に logs/signal_log.csv が GitHub の logs ブランチへ
+  自動コミットされる。
+  設定変更時のアーカイブファイルも同時にコミットされる。
   手動で実行したい場合:
     bash /Users/shionueta/Project/Scalping_bot/meme_scanner/commit_logs.sh
 
@@ -518,7 +555,7 @@
 
   Step 2: signal_log.csv を開く
     Finder で以下のファイルを見つける:
-      /Users/shionueta/Project/Scalping_bot/meme_scanner/signal_log.csv
+      /Users/shionueta/Project/Scalping_bot/meme_scanner/logs/signal_log.csv
 
     または GitHub の logs ブランチから最新版をダウンロードする。
 
@@ -590,9 +627,13 @@
              帯3: sl=1.75 / tp=4.0（RR比 約1:2.3）
     ────────────────────────────────────────────────────
 
-  Step 4: 提案された値を config.py に反映する
-    Claude の提案を参考に config.py を編集し、Bot を再起動する。
-    変更前後の勝率を /logsummary で比較して効果を確認する。
+  Step 4: 提案された値を edit_config.sh で反映する
+    ターミナルで設定エディタを起動して変更する:
+
+      bash /Users/shionueta/Project/Scalping_bot/meme_scanner/edit_config.sh
+
+    → 変更と同時にログが自動アーカイブされ、Bot も再起動される。
+    → 変更前後の CSV を別々に Claude に分析させて効果を比較する。
 
 【分析の際に役立つ追加の質問例】
 
@@ -671,19 +712,23 @@
   │   ├── indicators.py         RSI・ATR・VWAP の計算
   │   ├── reproducibility.py    再現性スコアの計算
   │   ├── scorer.py             スコアリング（全指標を統合）
-  │   ├── tracker.py            シグナルログの記録・結果更新
+  │   ├── tracker.py            シグナルログの記録・結果更新・ローテート
   │   └── cache.py              重複通知防止
   │
   ├── [自動生成ファイル]
-  │   ├── signal_log.csv        シグナルログ（★Claude 分析に使う）
-  │   └── scanner.log           実行ログ
+  │   ├── logs/                          シグナルログフォルダ（自動作成）
+  │   │   ├── signal_log.csv             現在進行中のログ（★Claude 分析に使う）
+  │   │   └── signal_log_until_*.csv     設定変更時のアーカイブ（比較分析用）
+  │   └── scanner.log                    実行ログ
   │
-  ├── commit_logs.sh            signal_log.csv を GitHub logs ブランチへコミット
-  └── requirements.txt          必要パッケージ一覧
+  ├── edit_config.sh            設定エディタ起動スクリプト（bash edit_config.sh）
+  ├── config_editor.py          設定変更用インタラクティブ CLI（edit_config.sh から呼ばれる）
+  └── commit_logs.sh            logs/ を GitHub logs ブランチへコミット
 
   【GitHub ブランチ構成】
     main  … ボットのソースコード
     logs  … signal_log.csv の長期保存（毎日 0:00 JST に自動コミット）
+            設定変更時のアーカイブファイルも保存される
 
 ================================================================
   使用 API（いずれも無料・APIキー不要）

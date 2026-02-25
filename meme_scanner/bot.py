@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import os
+import signal
 import subprocess
 from datetime import datetime, timezone, timedelta, time as dtime
 
@@ -34,6 +35,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 JST = timezone(timedelta(hours=9))
+
+# PID ファイルのパス
+_PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bot.pid")
+
+
+def _write_pid():
+    with open(_PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+
+def _remove_pid():
+    try:
+        os.remove(_PID_FILE)
+    except FileNotFoundError:
+        pass
+
 
 # ── グローバル状態 ───────────────────────────────────────────────
 cache            = NotificationCache()
@@ -340,16 +357,17 @@ async def cmd_logsummary(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📣 通知済みシグナル: {s['notified']}件\n"
         f"  確認済み:         {s['notified_resolved']}件\n"
         f"  通知後の勝率:     {s['notified_win_rate']}%\n"
+        f"  通知後の平均損益: {s['notified_avg_pnl']:+.2f}%\n"
         f"\n"
         f"━━━━━━━━━━━━━━━\n"
         f"📊 平均スコア:      {s['avg_score']}点\n"
         f"📈 平均損益率:      {s['avg_pnl']:+.2f}%\n"
         f"\n"
         f"💾 ログファイル:\n"
-        f"  signal_log.csv\n"
+        f"  logs/signal_log.csv\n"
         f"\n"
         f"📎 Claude に最適設定を分析させる方法:\n"
-        f"  signal_log.csv を Claude に添付して\n"
+        f"  logs/signal_log.csv を Claude に添付して\n"
         f"  「最適なconfig設定を提案して」と送る"
     )
     await update.message.reply_text(msg)
@@ -469,14 +487,14 @@ async def daily_log_commit_job(context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"[log_commit] {msg}")
             await context.bot.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                text=f"📊 signal_log.csv を GitHub (logs ブランチ) にコミットしました\n{msg}",
+                text=f"📊 logs/signal_log.csv を GitHub (logs ブランチ) にコミットしました\n{msg}",
             )
         else:
             err = result.stderr.strip()
             logger.error(f"[log_commit] コミット失敗: {err}")
             await context.bot.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                text=f"⚠️ signal_log.csv のコミットに失敗しました\n{err}",
+                text=f"⚠️ logs/signal_log.csv のコミットに失敗しました\n{err}",
             )
     except Exception as e:
         logger.error(f"[log_commit] コミットエラー: {e}")
@@ -498,32 +516,36 @@ def main():
     if not config.TELEGRAM_CHAT_ID:
         raise ValueError("TELEGRAM_CHAT_ID が設定されていません。.env を確認してください。")
 
-    app = (
-        Application.builder()
-        .token(config.TELEGRAM_TOKEN)
-        .post_init(on_startup)
-        .build()
-    )
+    _write_pid()
+    try:
+        app = (
+            Application.builder()
+            .token(config.TELEGRAM_TOKEN)
+            .post_init(on_startup)
+            .build()
+        )
 
-    app.add_handler(CommandHandler("start",       cmd_start))
-    app.add_handler(CommandHandler("scan",        cmd_scan))
-    app.add_handler(CommandHandler("stop",        cmd_stop))
-    app.add_handler(CommandHandler("status",      cmd_status))
-    app.add_handler(CommandHandler("threshold",   cmd_threshold))
-    app.add_handler(CommandHandler("setmc",       cmd_setmc))
-    app.add_handler(CommandHandler("setinterval", cmd_setinterval))
-    app.add_handler(CommandHandler("logsummary",  cmd_logsummary))
-    app.add_handler(CommandHandler("help",        cmd_help))
+        app.add_handler(CommandHandler("start",       cmd_start))
+        app.add_handler(CommandHandler("scan",        cmd_scan))
+        app.add_handler(CommandHandler("stop",        cmd_stop))
+        app.add_handler(CommandHandler("status",      cmd_status))
+        app.add_handler(CommandHandler("threshold",   cmd_threshold))
+        app.add_handler(CommandHandler("setmc",       cmd_setmc))
+        app.add_handler(CommandHandler("setinterval", cmd_setinterval))
+        app.add_handler(CommandHandler("logsummary",  cmd_logsummary))
+        app.add_handler(CommandHandler("help",        cmd_help))
 
-    # 毎日 0:00 JST に signal_log.csv を logs ブランチへコミット
-    app.job_queue.run_daily(
-        daily_log_commit_job,
-        time=dtime(hour=0, minute=0, tzinfo=JST),
-        name="daily_log_commit",
-    )
+        # 毎日 0:00 JST に signal_log.csv を logs ブランチへコミット
+        app.job_queue.run_daily(
+            daily_log_commit_job,
+            time=dtime(hour=0, minute=0, tzinfo=JST),
+            name="daily_log_commit",
+        )
 
-    logger.info("Bot起動")
-    app.run_polling()
+        logger.info("Bot起動")
+        app.run_polling()
+    finally:
+        _remove_pid()
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ tracker.py
   - スキャンのたびにスコア計算済みの全ペアを記録（閾値未満も含む）
   - 60分後にバックグラウンドで価格を取得して結果（WIN/LOSS）を更新
 
-出力ファイル: signal_log.csv（Excel/Numbers で直接開ける UTF-8 BOM 形式）
+出力ファイル: logs/signal_log.csv（Excel/Numbers で直接開ける UTF-8 BOM 形式）
 """
 from __future__ import annotations
 
@@ -26,8 +26,9 @@ import config
 logger = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
 
-# ログファイルのパス（bot.py と同じディレクトリ）
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "signal_log.csv")
+# ログフォルダとファイルのパス
+LOG_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+LOG_FILE = os.path.join(LOG_DIR, "signal_log.csv")
 
 # シグナルから何秒後に結果を確認するか（60分）
 OUTCOME_CHECK_DELAY = 3600
@@ -123,7 +124,8 @@ COLUMNS = [
 # ══════════════════════════════════════════════════════════════
 
 def _init_csv():
-    """CSV が存在しない場合はヘッダー付きで新規作成する。"""
+    """CSV が存在しない場合はヘッダー付きで新規作成する。logs/ フォルダも自動作成する。"""
+    os.makedirs(LOG_DIR, exist_ok=True)
     if not os.path.exists(LOG_FILE):
         pd.DataFrame(columns=COLUMNS).to_csv(LOG_FILE, index=False, encoding="utf-8-sig")
         logger.info(f"[tracker] ログファイル新規作成: {LOG_FILE}")
@@ -149,6 +151,27 @@ def _write_csv(df: pd.DataFrame):
 # ══════════════════════════════════════════════════════════════
 #  公開 API
 # ══════════════════════════════════════════════════════════════
+
+def rotate_log() -> str | None:
+    """
+    設定変更時に呼び出す。
+    現在の signal_log.csv をタイムスタンプ付き名でリネーム（アーカイブ）し、
+    新しい空の signal_log.csv を作成する。
+
+    Returns:
+        アーカイブされたファイルの絶対パス。元ファイルが存在しなかった場合は None。
+    """
+    archived = None
+    if os.path.exists(LOG_FILE):
+        ts = datetime.now(JST).strftime("%Y%m%d_%H%M%S")
+        archived = os.path.join(LOG_DIR, f"signal_log_until_{ts}.csv")
+        os.rename(LOG_FILE, archived)
+        logger.info(f"[tracker] アーカイブ: {os.path.basename(archived)}")
+    # 新しい signal_log.csv を初期化
+    _init_csv()
+    logger.info("[tracker] 新しい signal_log.csv を作成しました")
+    return archived
+
 
 def has_old_open_signals() -> bool:
     """1時間以上経過した OPEN シグナルが存在するか確認する。"""
@@ -378,13 +401,21 @@ def get_summary() -> dict:
     )
     avg_pnl = round(float(pnl_series.mean()), 2) if len(pnl_series) > 0 else 0.0
 
-    # 通知済みシグナルの勝率
+    # 通知済みシグナルの勝率・平均損益率
     notified_resolved = notified[notified["outcome"].isin(WIN_OUTCOMES | LOSS_OUTCOMES)]
     notified_wins     = notified[notified["outcome"].isin(WIN_OUTCOMES)]
     notified_win_rate = (
         round(len(notified_wins) / len(notified_resolved) * 100, 1)
         if len(notified_resolved) > 0 else 0.0
     )
+
+    notified_pnl_series = (
+        notified["pnl_pct"]
+        .replace("", pd.NA)
+        .dropna()
+        .astype(float)
+    )
+    notified_avg_pnl = round(float(notified_pnl_series.mean()), 2) if len(notified_pnl_series) > 0 else 0.0
 
     return {
         "total":               len(df),
@@ -396,6 +427,7 @@ def get_summary() -> dict:
         "notified":            len(notified),
         "notified_resolved":   len(notified_resolved),
         "notified_win_rate":   notified_win_rate,
+        "notified_avg_pnl":    notified_avg_pnl,
         "avg_score":           round(float(df["score_total"].mean()), 1) if len(df) > 0 else 0.0,
         "avg_pnl":             avg_pnl,
         "log_file":            LOG_FILE,
