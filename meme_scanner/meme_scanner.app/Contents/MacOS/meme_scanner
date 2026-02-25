@@ -1,0 +1,21 @@
+#!/bin/bash
+# meme_scanner.app 実行ファイル
+# ダブルクリックすると Terminal を開いて start.sh を起動する
+
+START_SH="/Users/shionueta/Project/Scalping_bot/meme_scanner/start.sh"
+
+if [ ! -f "$START_SH" ]; then
+    osascript -e 'display alert "起動エラー" message "start.sh が見つかりません。\nプロジェクトを移動した場合は create_app.sh を再実行してください。" as critical'
+    exit 1
+fi
+
+# Terminal を開いて start.sh を実行する
+osascript - "$START_SH" << 'APPLESCRIPT'
+on run argv
+    set startSh to item 1 of argv
+    tell application "Terminal"
+        activate
+        do script "bash " & quoted form of startSh
+    end tell
+end run
+APPLESCRIPT
