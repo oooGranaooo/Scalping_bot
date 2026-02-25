@@ -230,6 +230,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     scan_running = True
+
+    # 起動時に1時間以上経過した OPEN シグナルがあれば即座に結果確認
+    if tracker.has_old_open_signals():
+        await update.message.reply_text("⏳ 未確認の古いシグナルがあります。結果を確認中...")
+        updated = await asyncio.to_thread(tracker.check_outcomes)
+        if updated > 0:
+            await update.message.reply_text(f"✅ {updated}件のシグナル結果を更新しました。")
+
     context.job_queue.run_repeating(
         run_scan,
         interval=scan_interval,

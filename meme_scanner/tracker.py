@@ -150,6 +150,21 @@ def _write_csv(df: pd.DataFrame):
 #  公開 API
 # ══════════════════════════════════════════════════════════════
 
+def has_old_open_signals() -> bool:
+    """1時間以上経過した OPEN シグナルが存在するか確認する。"""
+    _init_csv()
+    df = _read_csv()
+    if df.empty:
+        return False
+    now_unix = int(time.time())
+    return bool(
+        (
+            (df["outcome"] == "OPEN") &
+            (now_unix - df["signal_time_unix"].astype("Int64") >= OUTCOME_CHECK_DELAY)
+        ).any()
+    )
+
+
 def is_token_open(token_address: str) -> bool:
     """指定トークンが OPEN 状態で記録されているか確認する。"""
     _init_csv()
