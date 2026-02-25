@@ -52,6 +52,8 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
     name       = html.escape(pair["name"])
     ca         = html.escape(pair["token_address"])
 
+    pps_bonus_str = f"{bd['pps_bonus']:+.0f}" if bd.get("pps_bonus", 0) != 0 else "±0"
+
     msg = (
         f"🚨 ミームコインアラート 🚨\n"
         f"\n"
@@ -71,6 +73,12 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
         f"({result['success_count']}/{result['signal_count']}回成功 / "
         f"{result['success_rate']:.0%}){low_warn}\n"
         f"  過熱ペナル: {bd['penalty']:.0f}/−15\n"
+        f"  価格位置:   {pps_bonus_str}/±10\n"
+        f"\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"📍 価格位置: {result['pps_stars']} {result['pps_label']} ({result['pps']}/5)\n"
+        f"  レンジ内: 下位{result['range_pct']:.0%}  "
+        f"VWAP乖離: {result['vwap_dev']:+.1f}%\n"
         f"\n"
         f"━━━━━━━━━━━━━━━\n"
         f"💰 現在価格:  ${result['entry']:.8f}\n"

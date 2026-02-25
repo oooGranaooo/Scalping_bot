@@ -68,6 +68,13 @@ COLUMNS = [
     "score_liquidity",     # 流動性スコア（0〜15点）
     "score_repro",         # 再現性スコア（0〜20点）
     "score_penalty",       # 過熱ペナルティ（0〜−15点）
+    "score_pps_bonus",     # 価格位置ボーナス（+10〜-10点）
+
+    # ── 価格位置スコア（PPS） ────────────────────────────────
+    "pps",                 # 価格位置スコア（1〜5、5=強い安値圏）
+    "pps_label",           # 価格位置ラベル（"強い安値圏" など）
+    "range_pct",           # レンジ内位置（0.0=最安値〜1.0=最高値）
+    "vwap_dev",            # VWAPからの乖離率（%）
 
     # ── 再現性の詳細 ──────────────────────────────────────────
     "signal_count",        # 過去シグナル発生回数
@@ -198,6 +205,11 @@ def record_signal(
         "score_liquidity":   round(bd["liq_score"], 1),
         "score_repro":       round(bd["repro_score"], 1),
         "score_penalty":     round(bd["penalty"], 1),
+        "score_pps_bonus":   round(bd.get("pps_bonus", 0), 1),
+        "pps":               result.get("pps", 3),
+        "pps_label":         result.get("pps_label", "中間"),
+        "range_pct":         result.get("range_pct", 0.5),
+        "vwap_dev":          result.get("vwap_dev", 0.0),
         "signal_count":      result["signal_count"],
         "success_count":     result["success_count"],
         "success_rate":      round(result["success_rate"], 3),

@@ -5,6 +5,7 @@ import pandas as pd
 import config
 from indicators import calc_rsi, calc_atr, calc_vwap, calc_volume_surge
 from reproducibility import calc_reproducibility
+from price_position import calc_price_position
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,12 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
     repro_score = repro["reproducibility_score"]
     low_sample  = repro["signal_count"] < 5
 
+    # ── 価格位置スコア（PPS）加減点（+10〜-10点） ────────────────
+    pps_result = calc_price_position(df, vwap, rsi)
+    pps_bonus  = pps_result["pps_bonus"]
+
     # ── 合計スコア ────────────────────────────────────────────
-    total = vol_score + vwap_score + rsi_score + liq_score + repro_score + penalty
+    total = vol_score + vwap_score + rsi_score + liq_score + repro_score + penalty + pps_bonus
     score = max(0, min(100, round(total)))
 
     # ── 損切り・利確 ──────────────────────────────────────────
@@ -110,6 +115,7 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
             "liq_score":   liq_score,
             "repro_score": repro_score,
             "penalty":     penalty,
+            "pps_bonus":   pps_bonus,
         },
         "mc_band":       get_mc_band_label(mc),
         "rsi":           rsi,
@@ -124,6 +130,11 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
         "atr_tp_mult":   atr_tp_mult,
         "surge_min":     surge_min,
         "rsi_ob":        rsi_ob,
+        "pps":           pps_result["pps"],
+        "pps_label":     pps_result["pps_label"],
+        "pps_stars":     pps_result["pps_stars"],
+        "range_pct":     pps_result["range_pct"],
+        "vwap_dev":      pps_result["vwap_dev"],
         "signal_count":  repro["signal_count"],
         "success_count": repro["success_count"],
         "success_rate":  repro["success_rate"],
