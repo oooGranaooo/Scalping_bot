@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import html
 import logging
+import os
+import subprocess
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time as dtime
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -424,6 +426,35 @@ async def cmd_setmc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ── 毎日ログコミットジョブ ────────────────────────────────────────
+async def daily_log_commit_job(context: ContextTypes.DEFAULT_TYPE):
+    """毎日 0:00 JST に signal_log.csv を GitHub の logs ブランチへコミットする"""
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_logs.sh")
+    try:
+        result = subprocess.run(
+            ["bash", script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0:
+            msg = result.stdout.strip()
+            logger.info(f"[log_commit] {msg}")
+            await context.bot.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                text=f"📊 signal_log.csv を GitHub (logs ブランチ) にコミットしました\n{msg}",
+            )
+        else:
+            err = result.stderr.strip()
+            logger.error(f"[log_commit] コミット失敗: {err}")
+            await context.bot.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                text=f"⚠️ signal_log.csv のコミットに失敗しました\n{err}",
+            )
+    except Exception as e:
+        logger.error(f"[log_commit] コミットエラー: {e}")
+
+
 # ── 起動時フック ─────────────────────────────────────────────────
 async def on_startup(app: Application) -> None:
     """Bot 起動直後に Telegram へヘルプメッセージを送信する"""
@@ -456,6 +487,13 @@ def main():
     app.add_handler(CommandHandler("setinterval", cmd_setinterval))
     app.add_handler(CommandHandler("logsummary",  cmd_logsummary))
     app.add_handler(CommandHandler("help",        cmd_help))
+
+    # 毎日 0:00 JST に signal_log.csv を logs ブランチへコミット
+    app.job_queue.run_daily(
+        daily_log_commit_job,
+        time=dtime(hour=0, minute=0, tzinfo=JST),
+        name="daily_log_commit",
+    )
 
     logger.info("Bot起動")
     app.run_polling()
