@@ -91,7 +91,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
 
     logger.info("スキャン開始")
 
-    # Stage 1: DexScreener でMCフィルタ
+    # Stage 1: GeckoTerminal trending_pools でMCフィルタ
     pairs = dex_scanner.get_filtered_pairs()
     logger.info(f"Stage1完了: MCレンジ内の上位{len(pairs)}件をスキャン（MC降順）")
 
@@ -103,23 +103,21 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"{pair['symbol']}: キャッシュ済みのためスキップ")
             continue
 
-        # Stage 2-1: GeckoTerminal でプールアドレス取得
-        pool_address = gt_fetcher.get_pool_address(token_address)
+        # Stage 2: OHLCV取得
+        # pair_address は trending_pools から取得済みのプールアドレスをそのまま使用
+        pool_address = pair["pair_address"]
         if not pool_address:
-            logger.warning(f"{pair['symbol']}: プールアドレス取得失敗、スキップ")
+            logger.warning(f"{pair['symbol']}: プールアドレスなし、スキップ")
             continue
-        time.sleep(config.GT_REQUEST_INTERVAL)
 
-        # Stage 2-2: OHLCV取得
+        time.sleep(config.GT_REQUEST_INTERVAL)
         df = gt_fetcher.fetch_ohlcv(pool_address, pair["mc"])
         if df is None or len(df) < config.MIN_CANDLES:
             logger.warning(
                 f"{pair['symbol']}: OHLCVデータ不足"
                 f"（{len(df) if df is not None else 0}本）、スキップ"
             )
-            time.sleep(config.GT_REQUEST_INTERVAL)
             continue
-        time.sleep(config.GT_REQUEST_INTERVAL)
 
         # スコア計算
         try:
