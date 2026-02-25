@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import time
 
@@ -7,34 +9,52 @@ import config
 
 logger = logging.getLogger(__name__)
 
+_GT_TRENDING_URL = f"{config.GT_BASE_URL}/networks/solana/trending_pools"
+
 
 def get_filtered_pairs() -> list[dict]:
     """
-    DexScreenerからSolanaペアを取得し、以下の順でフィルタリングする：
+    GeckoTerminal のトレンドプール一覧（Solana）を取得し、以下の順でフィルタリングする：
       1. MCレンジ（MC_MIN〜MC_MAX）と流動性（LIQ_MIN以上）でフィルタ
       2. MCの降順でソート
       3. 上位10件に絞る
 
     Returns: MCの高い順に最大10件のペアリスト（正規化済み辞書）
     """
-    url = f"{config.DEX_BASE_URL}/latest/dex/pairs/solana"
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-    except Exception as e:
-        logger.error(f"DexScreener APIリクエスト失敗: {e}")
-        return []
+    all_pools: list[dict] = []
 
-    pairs = resp.json().get("pairs", [])
+    # page=1 で20件取得（無料プランは1ページのみ）
+    for page in (1, 2):
+        try:
+            resp = requests.get(
+                _GT_TRENDING_URL,
+                params={"page": page},
+                headers=config.GT_HEADERS,
+                timeout=10,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error(f"GeckoTerminal trending_pools APIリクエスト失敗 (page={page}): {e}")
+            break
+
+        pools = resp.json().get("data", [])
+        if not pools:
+            break
+        all_pools.extend(pools)
+        time.sleep(config.GT_REQUEST_INTERVAL)
 
     filtered = []
-    for pair in pairs:
-        mc  = float(pair.get("marketCap") or pair.get("fdv") or 0)
-        liq = float((pair.get("liquidity") or {}).get("usd") or 0)
+    for pool in all_pools:
+        attrs = pool.get("attributes", {})
+        mc  = _to_float(attrs.get("market_cap_usd") or attrs.get("fdv_usd"))
+        liq = _to_float(attrs.get("reserve_in_usd"))
 
+        if mc == 0:
+            continue
         if config.MC_MIN <= mc <= config.MC_MAX and liq >= config.LIQ_MIN:
-            pair["_mc"] = mc
-            filtered.append(pair)
+            pool["_mc"] = mc
+            pool["_liq"] = liq
+            filtered.append(pool)
 
     filtered.sort(key=lambda p: p["_mc"], reverse=True)
     top = filtered[:10]
@@ -42,25 +62,53 @@ def get_filtered_pairs() -> list[dict]:
     return [_normalize(p) for p in top]
 
 
-def _normalize(pair: dict) -> dict:
-    mc  = pair["_mc"]
-    liq = float((pair.get("liquidity") or {}).get("usd") or 0)
+def _to_float(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _normalize(pool: dict) -> dict:
+    attrs = pool.get("attributes", {})
+    rels  = pool.get("relationships", {})
+
+    mc  = pool["_mc"]
+    liq = pool["_liq"]
+
+    # pool address（プールアドレス）
+    pair_address = attrs.get("address", "")
+
+    # トークンアドレス: "solana_<address>" → "<address>"
+    base_token_id = rels.get("base_token", {}).get("data", {}).get("id", "")
+    token_address = base_token_id.replace("solana_", "", 1)
+
+    # シンボル / 名前: "TOKEN / SOL" → symbol="TOKEN", name="TOKEN"
+    pool_name = attrs.get("name", "UNKNOWN / SOL")
+    symbol = pool_name.split(" / ")[0].strip()
+    name   = symbol  # GeckoTerminal trending_pools では正式名称が取れないためシンボル流用
+
+    volume_usd = attrs.get("volume_usd", {})
+    price_chg  = attrs.get("price_change_percentage", {})
+
+    dex_url = f"https://www.geckoterminal.com/solana/pools/{pair_address}"
+
     return {
-        "symbol":        pair["baseToken"]["symbol"],
-        "name":          pair["baseToken"]["name"],
-        "token_address": pair["baseToken"]["address"],
-        "pair_address":  pair["pairAddress"],
+        "symbol":        symbol,
+        "name":          name,
+        "token_address": token_address,
+        "pair_address":  pair_address,
         "mc":            mc,
         "liquidity":     liq,
-        "volume_h1":     float((pair.get("volume") or {}).get("h1") or 0),
-        "volume_h24":    float((pair.get("volume") or {}).get("h24") or 0),
+        "volume_h1":     _to_float(volume_usd.get("h1")),
+        "volume_h24":    _to_float(volume_usd.get("h24")),
         "price_change": {
-            "m5":  float((pair.get("priceChange") or {}).get("m5") or 0),
-            "h1":  float((pair.get("priceChange") or {}).get("h1") or 0),
-            "h6":  float((pair.get("priceChange") or {}).get("h6") or 0),
-            "h24": float((pair.get("priceChange") or {}).get("h24") or 0),
+            "m5":  _to_float(price_chg.get("m5")),
+            "h1":  _to_float(price_chg.get("h1")),
+            "h6":  _to_float(price_chg.get("h6")),
+            "h24": _to_float(price_chg.get("h24")),
         },
-        "dex_url": pair.get("url", ""),
+        "dex_url": dex_url,
     }
 
 
