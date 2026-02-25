@@ -149,7 +149,7 @@ MC_BAND_PARAMS = [
         "atr_sl_mult":         2.0,   # 損切り = ATR × 2.0
         "atr_tp_mult":         5.0,   # 利確   = ATR × 5.0
         "volume_surge_min":    3.0,   # 出来高が平均の3倍以上で急増判定
-        "ohlcv_aggregate":      10,   # 10分足を使用
+        "ohlcv_aggregate":      15,   # 15分足を使用（GeckoTerminalは1/5/15のみ対応）
     },
     # ────────────────────────────────────────
     #  帯3: $5M〜$50M（ミッドキャップ）
