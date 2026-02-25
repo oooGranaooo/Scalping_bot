@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 
 import requests
@@ -56,7 +57,7 @@ def get_filtered_pairs() -> list[dict]:
             pool["_liq"] = liq
             filtered.append(pool)
 
-    filtered.sort(key=lambda p: p["_mc"], reverse=True)
+    random.shuffle(filtered)
     top = filtered[:10]
 
     return [_normalize(p) for p in top]
