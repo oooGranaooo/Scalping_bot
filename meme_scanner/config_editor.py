@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -244,27 +245,20 @@ def _restart_bot():
     else:
         print("  .bot.pid が見つかりません。Botは起動していないか、手動で起動してください。")
 
-    # Bot の再起動
+    # Bot の再起動（新しいターミナルウィンドウで起動）
     bot_script  = os.path.join(SCRIPT_DIR, "bot.py")
-    log_file    = os.path.join(SCRIPT_DIR, "scanner.log")
-    # venv の Python を優先して使う
     venv_python = os.path.join(SCRIPT_DIR, ".venv", "bin", "python3")
     python_exe  = venv_python if os.path.exists(venv_python) else sys.executable
 
-    print("  Botを再起動しています...")
-    with open(log_file, "a") as lf:
-        subprocess.Popen(
-            [python_exe, bot_script],
-            stdout=lf,
-            stderr=lf,
-            start_new_session=True,
-            cwd=SCRIPT_DIR,
-        )
-    time.sleep(1)
+    print("  Botを新しいターミナルで再起動しています...")
+    cmd = f"cd {shlex.quote(SCRIPT_DIR)} && {shlex.quote(python_exe)} {shlex.quote(bot_script)}"
+    apple_script = f'tell application "Terminal" to do script "{cmd}"'
+    subprocess.Popen(["osascript", "-e", apple_script])
+    time.sleep(2)
     if os.path.exists(PID_FILE):
-        print(f"  ✅ Botを再起動しました。scanner.log で確認できます。")
+        print("  ✅ Botを新しいターミナルで再起動しました。")
     else:
-        print("  ⚠️  Botの起動を確認できませんでした。scanner.log を確認してください。")
+        print("  ⚠️  Botの起動を確認できませんでした。新しいターミナルウィンドウを確認してください。")
 
 
 # ══════════════════════════════════════════════════════════════
