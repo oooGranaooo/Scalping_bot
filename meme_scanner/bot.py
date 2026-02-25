@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import os
+import signal
 import subprocess
 from datetime import datetime, timezone, timedelta, time as dtime
 
@@ -35,6 +36,22 @@ logger = logging.getLogger(__name__)
 
 JST = timezone(timedelta(hours=9))
 
+# PID ファイルのパス
+_PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bot.pid")
+
+
+def _write_pid():
+    with open(_PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+
+def _remove_pid():
+    try:
+        os.remove(_PID_FILE)
+    except FileNotFoundError:
+        pass
+
+
 # ── グローバル状態 ───────────────────────────────────────────────
 cache            = NotificationCache()
 notify_threshold = config.NOTIFY_THRESHOLD
@@ -63,6 +80,7 @@ def format_message(pair: dict, result: dict, pool_address: str) -> str:
     atr_mc  = result["atr"] * supply
 
     pps_bonus_str = f"{bd['pps_bonus']:+.0f}" if bd.get("pps_bonus", 0) != 0 else "±0"
+
 
     msg = (
         f"🚨 ミームコインアラート 🚨\n"
@@ -117,7 +135,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
 
     # Stage 1: GeckoTerminal trending_pools でMCフィルタ
     pairs = dex_scanner.get_filtered_pairs()
-    logger.info(f"Stage1完了: MCレンジ内の上位{len(pairs)}件をスキャン（MC降順）")
+    logger.info(f"Stage1完了: MCレンジ内からランダム{len(pairs)}件をスキャン")
 
     for pair in pairs:
         token_address = pair["token_address"]
@@ -125,6 +143,11 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
         # 重複チェック
         if cache.is_recent(token_address):
             logger.info(f"{pair['symbol']}: キャッシュ済みのためスキップ")
+            continue
+
+        # OPEN中チェック（OHLCV取得前にスキップして無駄なAPI呼び出しを防ぐ）
+        if tracker.is_token_open(token_address):
+            logger.info(f"{pair['symbol']}: OPEN中のためスキップ")
             continue
 
         # Stage 2: OHLCV取得
@@ -173,7 +196,7 @@ async def run_scan(context: ContextTypes.DEFAULT_TYPE):
 
 async def check_outcomes_job(context: ContextTypes.DEFAULT_TYPE):
     """シグナルから60分後の値動きを確認してログを更新するバックグラウンドジョブ。"""
-    updated = tracker.check_outcomes()
+    updated = await asyncio.to_thread(tracker.check_outcomes)
     if updated > 0:
         logger.info(f"[tracker] バックグラウンド結果確認: {updated}件更新")
 
@@ -234,6 +257,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     scan_running = True
+
+    # 起動時に1時間以上経過した OPEN シグナルがあれば即座に結果確認
+    if tracker.has_old_open_signals():
+        await update.message.reply_text("⏳ 未確認の古いシグナルがあります。結果を確認中...")
+        updated = await asyncio.to_thread(tracker.check_outcomes)
+        if updated > 0:
+            await update.message.reply_text(f"✅ {updated}件のシグナル結果を更新しました。")
+
     context.job_queue.run_repeating(
         run_scan,
         interval=scan_interval,
@@ -241,11 +272,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name="auto_scan",
     )
     # 15分ごとにシグナルの結果（60分後の値動き）を確認するジョブ
+    # first=450: auto_scan（5分間隔）と重複しないよう7.5分後に初回実行
+    # misfire_grace_time=120: auto_scan がイベントループを占有しても最大2分以内なら実行
     context.job_queue.run_repeating(
         check_outcomes_job,
         interval=900,   # 15分ごと
-        first=900,
+        first=450,      # /start から7.5分後に初回実行（auto_scan と重複しない）
         name="outcome_check",
+        job_kwargs={"misfire_grace_time": 120},
     )
     interval_disp = (
         f"{scan_interval // 60}分"
@@ -283,7 +317,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⚙️ 現在の設定\n"
         f"\n"
         f"📦 MCレンジ:     ${config.MC_MIN:,.0f} 〜 ${config.MC_MAX:,.0f}\n"
-        f"🏆 スキャン対象: MC上位10件\n"
+        f"🎲 スキャン対象: MCレンジ内からランダム10件\n"
         f"🎯 通知閾値:     {notify_threshold}点以上\n"
         f"⏱️ スキャン間隔: "
         f"{'%d分' % (scan_interval // 60) if scan_interval % 60 == 0 else '%d秒' % scan_interval}"
@@ -333,16 +367,17 @@ async def cmd_logsummary(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📣 通知済みシグナル: {s['notified']}件\n"
         f"  確認済み:         {s['notified_resolved']}件\n"
         f"  通知後の勝率:     {s['notified_win_rate']}%\n"
+        f"  通知後の平均損益: {s['notified_avg_pnl']:+.2f}%\n"
         f"\n"
         f"━━━━━━━━━━━━━━━\n"
         f"📊 平均スコア:      {s['avg_score']}点\n"
         f"📈 平均損益率:      {s['avg_pnl']:+.2f}%\n"
         f"\n"
         f"💾 ログファイル:\n"
-        f"  signal_log.csv\n"
+        f"  logs/signal_log.csv\n"
         f"\n"
         f"📎 Claude に最適設定を分析させる方法:\n"
-        f"  signal_log.csv を Claude に添付して\n"
+        f"  logs/signal_log.csv を Claude に添付して\n"
         f"  「最適なconfig設定を提案して」と送る"
     )
     await update.message.reply_text(msg)
@@ -462,14 +497,14 @@ async def daily_log_commit_job(context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"[log_commit] {msg}")
             await context.bot.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                text=f"📊 signal_log.csv を GitHub (logs ブランチ) にコミットしました\n{msg}",
+                text=f"📊 logs/signal_log.csv を GitHub (logs ブランチ) にコミットしました\n{msg}",
             )
         else:
             err = result.stderr.strip()
             logger.error(f"[log_commit] コミット失敗: {err}")
             await context.bot.send_message(
                 chat_id=config.TELEGRAM_CHAT_ID,
-                text=f"⚠️ signal_log.csv のコミットに失敗しました\n{err}",
+                text=f"⚠️ logs/signal_log.csv のコミットに失敗しました\n{err}",
             )
     except Exception as e:
         logger.error(f"[log_commit] コミットエラー: {e}")
@@ -491,32 +526,36 @@ def main():
     if not config.TELEGRAM_CHAT_ID:
         raise ValueError("TELEGRAM_CHAT_ID が設定されていません。.env を確認してください。")
 
-    app = (
-        Application.builder()
-        .token(config.TELEGRAM_TOKEN)
-        .post_init(on_startup)
-        .build()
-    )
+    _write_pid()
+    try:
+        app = (
+            Application.builder()
+            .token(config.TELEGRAM_TOKEN)
+            .post_init(on_startup)
+            .build()
+        )
 
-    app.add_handler(CommandHandler("start",       cmd_start))
-    app.add_handler(CommandHandler("scan",        cmd_scan))
-    app.add_handler(CommandHandler("stop",        cmd_stop))
-    app.add_handler(CommandHandler("status",      cmd_status))
-    app.add_handler(CommandHandler("threshold",   cmd_threshold))
-    app.add_handler(CommandHandler("setmc",       cmd_setmc))
-    app.add_handler(CommandHandler("setinterval", cmd_setinterval))
-    app.add_handler(CommandHandler("logsummary",  cmd_logsummary))
-    app.add_handler(CommandHandler("help",        cmd_help))
+        app.add_handler(CommandHandler("start",       cmd_start))
+        app.add_handler(CommandHandler("scan",        cmd_scan))
+        app.add_handler(CommandHandler("stop",        cmd_stop))
+        app.add_handler(CommandHandler("status",      cmd_status))
+        app.add_handler(CommandHandler("threshold",   cmd_threshold))
+        app.add_handler(CommandHandler("setmc",       cmd_setmc))
+        app.add_handler(CommandHandler("setinterval", cmd_setinterval))
+        app.add_handler(CommandHandler("logsummary",  cmd_logsummary))
+        app.add_handler(CommandHandler("help",        cmd_help))
 
-    # 毎日 0:00 JST に signal_log.csv を logs ブランチへコミット
-    app.job_queue.run_daily(
-        daily_log_commit_job,
-        time=dtime(hour=0, minute=0, tzinfo=JST),
-        name="daily_log_commit",
-    )
+        # 毎日 0:00 JST に signal_log.csv を logs ブランチへコミット
+        app.job_queue.run_daily(
+            daily_log_commit_job,
+            time=dtime(hour=0, minute=0, tzinfo=JST),
+            name="daily_log_commit",
+        )
 
-    logger.info("Bot起動")
-    app.run_polling()
+        logger.info("Bot起動")
+        app.run_polling()
+    finally:
+        _remove_pid()
 
 
 if __name__ == "__main__":

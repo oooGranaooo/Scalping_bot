@@ -1,7 +1,9 @@
 .env
 scanner.log
 signal_log.csv
+logs/
 .venv/
 __pycache__/
 *.pyc
 **/.DS_Store
+.bot.pid

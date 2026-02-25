@@ -8,7 +8,8 @@ from config import NOTIFY_TTL
 
 logger = logging.getLogger(__name__)
 
-_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "signal_log.csv")
+_LOG_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+_LOG_FILE = os.path.join(_LOG_DIR, "signal_log.csv")
 
 
 class NotificationCache:

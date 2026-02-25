@@ -8,7 +8,7 @@ tracker.py
   - スキャンのたびにスコア計算済みの全ペアを記録（閾値未満も含む）
   - 60分後にバックグラウンドで価格を取得して結果（WIN/LOSS）を更新
 
-出力ファイル: signal_log.csv（Excel/Numbers で直接開ける UTF-8 BOM 形式）
+出力ファイル: logs/signal_log.csv（Excel/Numbers で直接開ける UTF-8 BOM 形式）
 """
 from __future__ import annotations
 
@@ -26,8 +26,9 @@ import config
 logger = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
 
-# ログファイルのパス（bot.py と同じディレクトリ）
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "signal_log.csv")
+# ログフォルダとファイルのパス
+LOG_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+LOG_FILE = os.path.join(LOG_DIR, "signal_log.csv")
 
 # シグナルから何秒後に結果を確認するか（60分）
 OUTCOME_CHECK_DELAY = 3600
@@ -35,6 +36,9 @@ OUTCOME_CHECK_DELAY = 3600
 # GeckoTerminal API リトライ設定
 _MAX_RETRIES = 3
 _RETRY_WAIT  = 10.0  # 429時のリトライ待機秒数
+
+# これより古いシグナルでも取得できなければ UNKNOWN に確定する（2時間）
+OUTCOME_UNKNOWN_AFTER = 2 * 3600  # 2時間
 
 # これより古いシグナルは GeckoTerminal のデータ範囲外になるため確認を諦める
 OUTCOME_MAX_AGE = 10 * 3600  # 10時間
@@ -127,7 +131,8 @@ COLUMNS = [
 # ══════════════════════════════════════════════════════════════
 
 def _init_csv():
-    """CSV が存在しない場合はヘッダー付きで新規作成する。"""
+    """CSV が存在しない場合はヘッダー付きで新規作成する。logs/ フォルダも自動作成する。"""
+    os.makedirs(LOG_DIR, exist_ok=True)
     if not os.path.exists(LOG_FILE):
         pd.DataFrame(columns=COLUMNS).to_csv(LOG_FILE, index=False, encoding="utf-8-sig")
         logger.info(f"[tracker] ログファイル新規作成: {LOG_FILE}")
@@ -154,6 +159,53 @@ def _write_csv(df: pd.DataFrame):
 #  公開 API
 # ══════════════════════════════════════════════════════════════
 
+def rotate_log() -> str | None:
+    """
+    設定変更時に呼び出す。
+    現在の signal_log.csv をタイムスタンプ付き名でリネーム（アーカイブ）し、
+    新しい空の signal_log.csv を作成する。
+
+    Returns:
+        アーカイブされたファイルの絶対パス。元ファイルが存在しなかった場合は None。
+    """
+    archived = None
+    if os.path.exists(LOG_FILE):
+        ts = datetime.now(JST).strftime("%Y%m%d_%H%M%S")
+        archived = os.path.join(LOG_DIR, f"signal_log_until_{ts}.csv")
+        os.rename(LOG_FILE, archived)
+        logger.info(f"[tracker] アーカイブ: {os.path.basename(archived)}")
+    # 新しい signal_log.csv を初期化
+    _init_csv()
+    logger.info("[tracker] 新しい signal_log.csv を作成しました")
+    return archived
+
+
+def has_old_open_signals() -> bool:
+    """1時間以上経過した OPEN シグナルが存在するか確認する。"""
+    _init_csv()
+    df = _read_csv()
+    if df.empty:
+        return False
+    now_unix = int(time.time())
+    return bool(
+        (
+            (df["outcome"] == "OPEN") &
+            (now_unix - df["signal_time_unix"].astype("Int64") >= OUTCOME_CHECK_DELAY)
+        ).any()
+    )
+
+
+def is_token_open(token_address: str) -> bool:
+    """指定トークンが OPEN 状態で記録されているか確認する。"""
+    _init_csv()
+    df = _read_csv()
+    if df.empty:
+        return False
+    return bool(
+        ((df["token_address"] == token_address) & (df["outcome"] == "OPEN")).any()
+    )
+
+
 def record_signal(
     pair_info: dict,
     result: dict,
@@ -164,6 +216,7 @@ def record_signal(
     """
     スキャン結果を CSV の新規行として記録する。
     閾値未満のペアも含め、スコア計算できたすべてを記録する。
+    同一トークンの outcome が OPEN のまま残っている場合は重複記録しない。
 
     Args:
         pair_info        : dex_scanner が返す正規化済みペア情報
@@ -173,9 +226,21 @@ def record_signal(
         notify_threshold : その時点の通知閾値
 
     Returns:
-        signal_id（8文字の識別子）
+        signal_id（8文字の識別子）。スキップした場合は空文字列。
     """
     _init_csv()
+
+    # OPEN 中の同トークンがあれば重複記録しない
+    df = _read_csv()
+    token = pair_info["token_address"]
+    if not df.empty:
+        already_open = (
+            (df["token_address"] == token) &
+            (df["outcome"] == "OPEN")
+        ).any()
+        if already_open:
+            logger.info(f"[tracker] スキップ（OPEN中）: {pair_info['symbol']}")
+            return ""
 
     mc_params = config.get_mc_params(pair_info["mc"])
     bd        = result["breakdown"]
@@ -236,8 +301,6 @@ def record_signal(
         "outcome":            "OPEN",
         "pnl_pct":            "",
     }
-
-    df = _read_csv()
     df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
     _write_csv(df)
 
@@ -301,6 +364,12 @@ def check_outcomes() -> int:
                     f"[tracker] 結果確認: {row.get('symbol')} "
                     f"→ {outcome_data['outcome']}  pnl={outcome_data['pnl_pct']}%"
                 )
+            elif age >= OUTCOME_UNKNOWN_AFTER:
+                # 2時間以上経過してもデータが取れない場合は UNKNOWN に確定する
+                df.at[idx, "outcome"]            = "UNKNOWN"
+                df.at[idx, "outcome_checked_at"] = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+                updated += 1
+                logger.info(f"[tracker] UNKNOWN（データ取得不可）: {row.get('symbol')} ({age//3600}時間{(age%3600)//60}分経過)")
         except Exception as e:
             logger.warning(f"[tracker] 結果確認失敗 ({row.get('symbol', '?')}): {e}")
 
@@ -344,13 +413,21 @@ def get_summary() -> dict:
     )
     avg_pnl = round(float(pnl_series.mean()), 2) if len(pnl_series) > 0 else 0.0
 
-    # 通知済みシグナルの勝率
+    # 通知済みシグナルの勝率・平均損益率
     notified_resolved = notified[notified["outcome"].isin(WIN_OUTCOMES | LOSS_OUTCOMES)]
     notified_wins     = notified[notified["outcome"].isin(WIN_OUTCOMES)]
     notified_win_rate = (
         round(len(notified_wins) / len(notified_resolved) * 100, 1)
         if len(notified_resolved) > 0 else 0.0
     )
+
+    notified_pnl_series = (
+        notified["pnl_pct"]
+        .replace("", pd.NA)
+        .dropna()
+        .astype(float)
+    )
+    notified_avg_pnl = round(float(notified_pnl_series.mean()), 2) if len(notified_pnl_series) > 0 else 0.0
 
     return {
         "total":               len(df),
@@ -362,6 +439,7 @@ def get_summary() -> dict:
         "notified":            len(notified),
         "notified_resolved":   len(notified_resolved),
         "notified_win_rate":   notified_win_rate,
+        "notified_avg_pnl":    notified_avg_pnl,
         "avg_score":           round(float(df["score_total"].mean()), 1) if len(df) > 0 else 0.0,
         "avg_pnl":             avg_pnl,
         "log_file":            LOG_FILE,
@@ -437,15 +515,18 @@ def _fetch_outcome(
         })
 
         # シグナル後 60分のウィンドウ
+        # 5分足のタイムスタンプは300秒境界なので、シグナル時刻を含む足の開始時刻から始める
+        candle_sec    = 300
+        signal_candle = (signal_unix // candle_sec) * candle_sec
         window = df[
-            (df["timestamp"] >= signal_unix) &
+            (df["timestamp"] >= signal_candle) &
             (df["timestamp"] <= signal_unix + 3600)
         ].copy()
 
         if window.empty:
             logger.warning(
                 f"[tracker] シグナル後ウィンドウにデータなし "
-                f"(pool={pool_address}, signal={signal_unix})"
+                f"(pool={pool_address}, signal={signal_unix}, candle_start={signal_candle})"
             )
             return None
 

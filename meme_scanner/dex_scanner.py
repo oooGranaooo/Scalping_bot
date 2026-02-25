@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 
 import requests
@@ -17,9 +18,9 @@ def get_filtered_pairs() -> list[dict]:
     GeckoTerminal のトレンドプール一覧（Solana）を取得し、以下の順でフィルタリングする：
       1. MCレンジ（MC_MIN〜MC_MAX）と流動性（LIQ_MIN以上）でフィルタ
       2. MCの降順でソート
-      3. 上位10件に絞る
+      3. ランダムに10件を選択
 
-    Returns: MCの高い順に最大10件のペアリスト（正規化済み辞書）
+    Returns: ランダムに選んだ最大10件のペアリスト（正規化済み辞書）
     """
     all_pools: list[dict] = []
 
@@ -56,7 +57,7 @@ def get_filtered_pairs() -> list[dict]:
             pool["_liq"] = liq
             filtered.append(pool)
 
-    filtered.sort(key=lambda p: p["_mc"], reverse=True)
+    random.shuffle(filtered)
     top = filtered[:10]
 
     return [_normalize(p) for p in top]
