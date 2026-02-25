@@ -44,7 +44,7 @@ def calc_reproducibility(df: pd.DataFrame, mc: float) -> dict:
     signal_count  = 0
     success_count = 0
 
-    min_idx = config.RSI_PERIOD + config.ATR_PERIOD  # = 23本目から
+    min_idx = max(config.RSI_PERIOD, config.ATR_PERIOD)  # = 14本目から（RSI/ATRは独立して計算されるためmaxが正しい）
 
     # ── インジケーターをSeries化（ループ内での再計算を避ける） ────────────────
     rsi_series = calc_rsi_series(df["close"])
