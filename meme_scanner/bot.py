@@ -240,7 +240,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.job_queue.run_repeating(
         check_outcomes_job,
         interval=900,   # 15分ごと
-        first=900,
+        first=60,       # /start から1分後に初回実行（起動直後の未確認分を早期に処理）
         name="outcome_check",
     )
     interval_disp = (

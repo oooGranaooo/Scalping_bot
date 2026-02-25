@@ -36,6 +36,9 @@ OUTCOME_CHECK_DELAY = 3600
 _MAX_RETRIES = 3
 _RETRY_WAIT  = 10.0  # 429時のリトライ待機秒数
 
+# これより古いシグナルでも取得できなければ UNKNOWN に確定する（2時間）
+OUTCOME_UNKNOWN_AFTER = 2 * 3600  # 2時間
+
 # これより古いシグナルは GeckoTerminal のデータ範囲外になるため確認を諦める
 OUTCOME_MAX_AGE = 10 * 3600  # 10時間
 
@@ -311,6 +314,12 @@ def check_outcomes() -> int:
                     f"[tracker] 結果確認: {row.get('symbol')} "
                     f"→ {outcome_data['outcome']}  pnl={outcome_data['pnl_pct']}%"
                 )
+            elif age >= OUTCOME_UNKNOWN_AFTER:
+                # 2時間以上経過してもデータが取れない場合は UNKNOWN に確定する
+                df.at[idx, "outcome"]            = "UNKNOWN"
+                df.at[idx, "outcome_checked_at"] = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
+                updated += 1
+                logger.info(f"[tracker] UNKNOWN（データ取得不可）: {row.get('symbol')} ({age//3600}時間{(age%3600)//60}分経過)")
         except Exception as e:
             logger.warning(f"[tracker] 結果確認失敗 ({row.get('symbol', '?')}): {e}")
 
@@ -447,15 +456,18 @@ def _fetch_outcome(
         })
 
         # シグナル後 60分のウィンドウ
+        # 5分足のタイムスタンプは300秒境界なので、シグナル時刻を含む足の開始時刻から始める
+        candle_sec    = 300
+        signal_candle = (signal_unix // candle_sec) * candle_sec
         window = df[
-            (df["timestamp"] >= signal_unix) &
+            (df["timestamp"] >= signal_candle) &
             (df["timestamp"] <= signal_unix + 3600)
         ].copy()
 
         if window.empty:
             logger.warning(
                 f"[tracker] シグナル後ウィンドウにデータなし "
-                f"(pool={pool_address}, signal={signal_unix})"
+                f"(pool={pool_address}, signal={signal_unix}, candle_start={signal_candle})"
             )
             return None
 
