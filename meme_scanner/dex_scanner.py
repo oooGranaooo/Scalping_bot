@@ -91,7 +91,7 @@ def _normalize(pool: dict) -> dict:
     volume_usd = attrs.get("volume_usd", {})
     price_chg  = attrs.get("price_change_percentage", {})
 
-    dex_url = f"https://www.geckoterminal.com/solana/pools/{pair_address}"
+    gecko_url = f"https://www.geckoterminal.com/solana/pools/{pair_address}"
 
     return {
         "symbol":        symbol,
@@ -108,7 +108,7 @@ def _normalize(pool: dict) -> dict:
             "h6":  _to_float(price_chg.get("h6")),
             "h24": _to_float(price_chg.get("h24")),
         },
-        "dex_url": dex_url,
+        "gecko_url": gecko_url,
     }
 
 

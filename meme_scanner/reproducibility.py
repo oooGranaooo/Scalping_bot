@@ -21,7 +21,7 @@ def calc_reproducibility(df: pd.DataFrame, mc: float) -> dict:
         success_count         : int    上昇成功回数
         success_rate          : float  成功率（0.0〜1.0）
     """
-    from indicators import calc_rsi, calc_vwap, calc_atr, calc_volume_surge
+    from indicators import calc_rsi_series, calc_atr_series, calc_vwap, calc_volume_surge
 
     mc_params   = config.get_mc_params(mc)
     surge_min   = mc_params["volume_surge_min"]
@@ -35,14 +35,26 @@ def calc_reproducibility(df: pd.DataFrame, mc: float) -> dict:
 
     min_idx = config.RSI_PERIOD + config.ATR_PERIOD  # = 23本目から
 
-    for i in range(min_idx, len(df) - lookforward - 1):
-        window = df.iloc[: i + 1]
+    # RSI・ATRは全インデックス分を一括計算（ループ内での再計算を避ける）
+    rsi_series = calc_rsi_series(df["close"])
+    atr_series = calc_atr_series(df)
 
-        rsi       = calc_rsi(window["close"])
-        atr       = calc_atr(window)
-        vwap      = calc_vwap(window)
+    # 出来高急増: 直近1本 vs 直前20本平均をSeries化
+    vol_avg = df["volume"].shift(1).rolling(20).mean()
+    vol_surge_series = df["volume"] / vol_avg.replace(0, float("nan"))
+
+    # VWAP: 当日フィルタを使うと再現性ループで不整合が出るため全期間VWAPをSeries化
+    typical   = (df["high"] + df["low"] + df["close"]) / 3
+    cum_tpv   = (typical * df["volume"]).cumsum()
+    cum_vol   = df["volume"].cumsum()
+    vwap_series = cum_tpv / cum_vol.replace(0, float("nan"))
+
+    for i in range(min_idx, len(df) - lookforward - 1):
+        rsi       = float(rsi_series.iloc[i])
+        atr       = float(atr_series.iloc[i])
         close_i   = float(df["close"].iloc[i])
-        vol_surge = calc_volume_surge(window)
+        vol_surge = float(vol_surge_series.iloc[i]) if not pd.isna(vol_surge_series.iloc[i]) else 0.0
+        vwap      = float(vwap_series.iloc[i])      if not pd.isna(vwap_series.iloc[i])      else close_i
 
         # シグナル判定（どれか1つ）
         sig_volume = vol_surge >= surge_min
