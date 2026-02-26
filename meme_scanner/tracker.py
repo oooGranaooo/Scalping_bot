@@ -267,7 +267,7 @@ def record_signal(
         "score_volume":      round(bd["vol_score"], 1),
         "score_vwap":        round(bd["vwap_score"], 1),
         "score_rsi":         round(bd["rsi_score"], 1),
-        "score_liquidity":   round(bd["liq_score"], 1),
+        "score_liquidity":   0,
         "score_repro":       round(bd["repro_score"], 1),
         "score_penalty":     round(bd["penalty"], 1),
         "score_pps_bonus":   round(bd.get("pps_bonus", 0), 1),

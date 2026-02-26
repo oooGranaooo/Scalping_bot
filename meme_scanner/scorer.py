@@ -74,14 +74,6 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
         rsi_score = 0.0
         penalty   = 0.0
 
-    # ── 流動性スコア（10点） ──────────────────────────────────
-    if liquidity >= 50_000:
-        liq_score = 10.0
-    elif liquidity >= 10_000:
-        liq_score = 10.0 * (liquidity - 10_000) / (50_000 - 10_000)
-    else:
-        liq_score = 0.0
-
     # ── 再現性スコア（25点） ─────────────────────────────────
     repro      = calc_reproducibility(df, mc)
     repro_score = repro["reproducibility_score"]
@@ -92,7 +84,7 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
     pps_bonus  = pps_result["pps_bonus"]
 
     # ── 合計スコア ────────────────────────────────────────────
-    total = vol_score + vwap_score + rsi_score + liq_score + repro_score + penalty + pps_bonus
+    total = vol_score + vwap_score + rsi_score + repro_score + penalty + pps_bonus
     score = max(0, min(100, round(total)))
 
     # ── 損切り・利確 ──────────────────────────────────────────
@@ -112,7 +104,6 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
             "vol_score":   vol_score,
             "vwap_score":  vwap_score,
             "rsi_score":   rsi_score,
-            "liq_score":   liq_score,
             "repro_score": repro_score,
             "penalty":     penalty,
             "pps_bonus":   pps_bonus,
@@ -168,11 +159,10 @@ if __name__ == "__main__":
                 result = calculate_score(df, pair)
                 bd = result["breakdown"]
                 print(f"\n[スコア: {result['score']}/100]  MC帯: {result['mc_band']}")
-                print(f"  出来高急増: {bd['vol_score']:.1f}/25  (×{result['vol_surge']:.2f})")
+                print(f"  出来高急増: {bd['vol_score']:.1f}/30  (×{result['vol_surge']:.2f})")
                 print(f"  VWAP上抜け: {bd['vwap_score']:.1f}/20")
-                print(f"  RSI(9):    {bd['rsi_score']:.1f}/20  (RSI={result['rsi']:.1f})")
-                print(f"  流動性:    {bd['liq_score']:.1f}/15")
-                print(f"  再現性:    {bd['repro_score']:.1f}/20  ({result['success_count']}/{result['signal_count']}回)")
+                print(f"  RSI(9):    {bd['rsi_score']:.1f}/15  (RSI={result['rsi']:.1f})")
+                print(f"  再現性:    {bd['repro_score']:.1f}/25  ({result['success_count']}/{result['signal_count']}回)")
                 print(f"  ペナルティ:{bd['penalty']:.1f}")
                 print(f"\n  Entry:  ${result['entry']:.8f}")
                 print(f"  SL:     ${result['stop_loss']:.8f}  (ATR×{result['atr_sl_mult']})")
