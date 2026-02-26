@@ -23,7 +23,7 @@ def calc_reproducibility(df: pd.DataFrame, mc: float) -> dict:
         mc    : 時価総額（MC帯判定に使用）
 
     Returns:
-        reproducibility_score : float  再現性スコア（0〜20点）
+        reproducibility_score : float  再現性スコア（0〜25点）
         signal_count          : int    シグナル発生回数
         success_count         : int    上昇成功回数（SL/TP基準）
         success_rate          : float  補正前の生の成功率（0.0〜1.0）
@@ -126,16 +126,16 @@ def calc_reproducibility(df: pd.DataFrame, mc: float) -> dict:
     # ── 改善4: 成功率 50% 以上も差をつける（75% で満点） ─────────────────────
     #
     #  adjusted_rate < 25%  → 0点
-    #  25% ≤ rate < 50%     → 線形補間（0〜10点）
-    #  50% ≤ rate < 75%     → 線形補間（10〜20点）
-    #  rate ≥ 75%           → 満点 20点
+    #  25% ≤ rate < 50%     → 線形補間（0〜12.5点）
+    #  50% ≤ rate < 75%     → 線形補間（12.5〜25点）
+    #  rate ≥ 75%           → 満点 25点
     #
     if adjusted_rate >= 0.75:
-        raw_score = 20.0
+        raw_score = 25.0
     elif adjusted_rate >= 0.50:
-        raw_score = 10.0 + 10.0 * (adjusted_rate - 0.50) / 0.25
+        raw_score = 12.5 + 12.5 * (adjusted_rate - 0.50) / 0.25
     elif adjusted_rate >= 0.25:
-        raw_score = 10.0 * (adjusted_rate - 0.25) / 0.25
+        raw_score = 12.5 * (adjusted_rate - 0.25) / 0.25
     else:
         raw_score = 0.0
 

@@ -44,45 +44,45 @@ def calculate_score(df: pd.DataFrame, pair_info: dict) -> dict:
     vol_surge = calc_volume_surge(df)
     close     = float(df["close"].iloc[-1])
 
-    # ── 出来高急増スコア（25点） ──────────────────────────────
+    # ── 出来高急増スコア（30点） ──────────────────────────────
     surge_min  = mc_params["volume_surge_min"]
     surge_half = surge_min * 0.7
 
     if vol_surge >= surge_min:
-        vol_score = 25.0
+        vol_score = 30.0
     elif vol_surge >= surge_half:
-        vol_score = 25.0 * (vol_surge - surge_half) / (surge_min - surge_half)
+        vol_score = 30.0 * (vol_surge - surge_half) / (surge_min - surge_half)
     else:
         vol_score = 0.0
 
     # ── VWAP上抜けスコア（20点） ─────────────────────────────
     vwap_score = 20.0 if close > vwap else 0.0
 
-    # ── RSI(9)スコア（20点）＋ 過熱ペナルティ（−15点） ────────
+    # ── RSI(9)スコア（15点）＋ 過熱ペナルティ（−15点） ────────
     rsi_ob = mc_params["rsi_overbought"]
 
     if 50 < rsi <= rsi_ob:
-        rsi_score = 20.0
+        rsi_score = 15.0
         penalty   = 0.0
     elif rsi_ob < rsi <= rsi_ob + 5:
-        rsi_score = 20.0
+        rsi_score = 15.0
         penalty   = -15.0 * (rsi - rsi_ob) / 5
     elif rsi > rsi_ob + 5:
-        rsi_score = 20.0
+        rsi_score = 15.0
         penalty   = -15.0
     else:
         rsi_score = 0.0
         penalty   = 0.0
 
-    # ── 流動性スコア（15点） ──────────────────────────────────
+    # ── 流動性スコア（10点） ──────────────────────────────────
     if liquidity >= 50_000:
-        liq_score = 15.0
+        liq_score = 10.0
     elif liquidity >= 10_000:
-        liq_score = 15.0 * (liquidity - 10_000) / (50_000 - 10_000)
+        liq_score = 10.0 * (liquidity - 10_000) / (50_000 - 10_000)
     else:
         liq_score = 0.0
 
-    # ── 再現性スコア（20点） ─────────────────────────────────
+    # ── 再現性スコア（25点） ─────────────────────────────────
     repro      = calc_reproducibility(df, mc)
     repro_score = repro["reproducibility_score"]
     low_sample  = repro["signal_count"] < 5
