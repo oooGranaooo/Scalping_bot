@@ -66,11 +66,11 @@ COLUMNS = [
 
     # ── スコア内訳 ────────────────────────────────────────────
     "score_total",         # 合計スコア（0〜100点）
-    "score_volume",        # 出来高急増スコア（0〜25点）
+    "score_volume",        # 出来高急増スコア（0〜30点）
     "score_vwap",          # VWAP上抜けスコア（0 or 20点）
-    "score_rsi",           # RSIスコア（0〜20点）
-    "score_liquidity",     # 流動性スコア（0〜15点）
-    "score_repro",         # 再現性スコア（0〜20点）
+    "score_rsi",           # RSIスコア（0〜15点）
+    "score_liquidity",     # 流動性スコア（廃止・常に0）
+    "score_repro",         # 再現性スコア（0〜25点）
     "score_penalty",       # 過熱ペナルティ（0〜−15点）
     "score_pps_bonus",     # 価格位置ボーナス（+10〜-10点）
 
